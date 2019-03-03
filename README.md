@@ -8,7 +8,7 @@ The first service can be found under the topic *execute_single_footstep* and has
 
 * foot. A uint8 to defines the swing foot. The type should be set via the constants *left* and *right* from the service request type.
 * footstep_x, footstep_y, footstep_z, footstep_yaw. They define the desired pose relative to the support foot.
-* footstep_height. The height of the stepping motion, which is defined as **max('initial foot z','final foot z') + footstep_height**.
+* footstep_height. The height of the stepping motion.
 * footstep_duration. The duration (in *s*) for moving the footstep from the initial to the goal pose.
 * base_height. The height of the base above the support foot.
 * base_speed. The speed (in *m/s*) at which the base moves to lie above the support foot.
