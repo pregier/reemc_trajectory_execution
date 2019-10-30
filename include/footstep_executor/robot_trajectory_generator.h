@@ -70,6 +70,8 @@ private:
   RectangularTrajectoryGenerator rectangularTrajectoryGenerator;
   LinearTrajectoryGenerator linearTrajectoryGenerator;
 
+  KDL::Chain chainRight, chainLeft;
+
   bool initialize();
 
   void initializeJointNames();

@@ -13,26 +13,26 @@
 FootstepExecutor::FootstepExecutor() :
     generator("base_link", "left_sole_link", "right_sole_link"), firstJointsSet(false)
 {
-  initialize();
+    initialize();
 }
 
 void FootstepExecutor::run()
 {
-  ros::WallRate rate(100);
-  while (ros::ok())
-  {
-    ros::spinOnce();
-    rate.sleep();
+    ros::WallRate rate(100);
+    while (ros::ok())
+    {
+        ros::spinOnce();
+        rate.sleep();
 
-    std_msgs::Bool msg;
+        std_msgs::Bool msg;
 
-    if (trajectoryClient->getState().isDone())
-      msg.data = false;
-    else
-      msg.data = true;
+        if (trajectoryClient->getState().isDone())
+            msg.data = false;
+        else
+            msg.data = true;
 
-    publisherBusy.publish(msg);
-  }
+        publisherBusy.publish(msg);
+    }
 }
 
 //////////////////////////////////////////////////////////////////
@@ -43,87 +43,103 @@ void FootstepExecutor::run()
 
 void FootstepExecutor::initialize()
 {
-  jointStates.resize(14);
+    jointStates.resize(14);
 
-  subscriberJointStates = nh.subscribe("/joint_states", 1, &FootstepExecutor::subscriberJointStatesHandler, this);
-  publisherBusy = nh.advertise<std_msgs::Bool>("busy_executing_step", 0);
+    subscriberJointStates = nh.subscribe("/joint_states", 1, &FootstepExecutor::subscriberJointStatesHandler, this);
+    publisherBusy = nh.advertise<std_msgs::Bool>("busy_executing_step", 0);
 
-  serviceSingleFootstepExecution = nh.advertiseService("execute_single_footstep", &FootstepExecutor::serviceSingleFootstepExecutionHandler, this);
-  serviceStepToInitPose = nh.advertiseService("step_to_init_pose", &FootstepExecutor::serviceStepToInitPoseHandler, this);
-  trajectoryClient = new actionlib::SimpleActionClient<control_msgs::FollowJointTrajectoryAction>("/lower_body_controller/follow_joint_trajectory");
+    serviceSingleFootstepExecution = nh.advertiseService("execute_single_footstep", &FootstepExecutor::serviceSingleFootstepExecutionHandler, this);
+    serviceStepToInitPose = nh.advertiseService("step_to_init_pose", &FootstepExecutor::serviceStepToInitPoseHandler, this);
+    trajectoryClient = new actionlib::SimpleActionClient<control_msgs::FollowJointTrajectoryAction>("/lower_body_controller/follow_joint_trajectory");
 }
 
 void FootstepExecutor::subscriberJointStatesHandler(const sensor_msgs::JointState &msg)
 {
-  firstJointsSet = true;
+    firstJointsSet = true;
 
-  UInt index = 0;
-  for (Int i = 22; i >= 16; --i, ++index)
-    jointStates[index] = msg.position[i];
-  for (Int i = 29; i >= 23; --i, ++index)
-    jointStates[index] = msg.position[i];
+    UInt index = 0;
+    for (Int i = 22; i >= 16; --i, ++index)
+        jointStates[index] = msg.position[i];
+    for (Int i = 29; i >= 23; --i, ++index)
+        jointStates[index] = msg.position[i];
 }
 
 bool FootstepExecutor::serviceSingleFootstepExecutionHandler(reemc_trajectory_execution::single_footstep_executionRequest &req,
-                                                             reemc_trajectory_execution::single_footstep_executionResponse &res)
+        reemc_trajectory_execution::single_footstep_executionResponse &res)
 {
-  control_msgs::FollowJointTrajectoryGoal goal;
-  RobotTrajectoryGenerator::Foot supportFoot, swingFoot;
+    std::cout << "Service start!!!!!" << std::endl;
+    control_msgs::FollowJointTrajectoryGoal goal;
+    RobotTrajectoryGenerator::Foot supportFoot, swingFoot;
 
-  if (req.foot == reemc_trajectory_execution::single_footstep_executionRequest::left)
-  {
-    supportFoot = RobotTrajectoryGenerator::Foot::right;
-    swingFoot = RobotTrajectoryGenerator::Foot::left;
-  }
-  else
-  {
-    supportFoot = RobotTrajectoryGenerator::Foot::left;
-    swingFoot = RobotTrajectoryGenerator::Foot::right;
-  }
+    if (req.foot == reemc_trajectory_execution::single_footstep_executionRequest::left)
+    {
+        supportFoot = RobotTrajectoryGenerator::Foot::right;
+        swingFoot = RobotTrajectoryGenerator::Foot::left;
+    }
+    else
+    {
+        supportFoot = RobotTrajectoryGenerator::Foot::left;
+        swingFoot = RobotTrajectoryGenerator::Foot::right;
+    }
 
-  Pose6D footstepPose(req.footstep_x, req.footstep_y, req.footstep_z, 0.0, 0.0, req.footstep_yaw);
+    Pose6D footstepPose(req.footstep_x, req.footstep_y, req.footstep_z, 0.0, 0.0, req.footstep_yaw);
 
-  res.status = reemc_trajectory_execution::single_footstep_executionResponse::success;
-  generator.setInitialJointStates(jointStates);
-  if (!generator.addTrajectoryBaseAboveFoot(goal, supportFoot, req.base_height, req.footstep_yaw * 0.5, req.base_speed))
-    res.status = reemc_trajectory_execution::single_footstep_executionResponse::fail;
-  else
-    generator.setInitialJointStates(goal.trajectory.points.back().positions);
+    res.status = reemc_trajectory_execution::single_footstep_executionResponse::success;
+    generator.setInitialJointStates(jointStates);
+    if (!generator.addTrajectoryBaseAboveFoot(goal, supportFoot, req.base_height, req.footstep_yaw * 0.5, req.base_speed))
+    {
+        std::cout << "if false 1" << std::endl;
+        res.status = reemc_trajectory_execution::single_footstep_executionResponse::fail;
+    }
+    else
+    {
+        generator.setInitialJointStates(goal.trajectory.points.back().positions);
+    }
 
-  if (res.status != reemc_trajectory_execution::single_footstep_executionResponse::success
-      || !generator.addTrajectoryFootstepRectangularRelativePose(goal, swingFoot, req.footstep_height, footstepPose, req.footstep_duration))
-    res.status = reemc_trajectory_execution::single_footstep_executionResponse::fail;
-  else
-    generator.setInitialJointStates(goal.trajectory.points.back().positions);
 
-  if (res.status != reemc_trajectory_execution::single_footstep_executionResponse::success
-      || !generator.addTrajectoryBaseAboveFoot(goal, swingFoot, req.base_height, 0.0, req.base_speed))
-    res.status = reemc_trajectory_execution::single_footstep_executionResponse::fail;
+//    if (res.status != reemc_trajectory_execution::single_footstep_executionResponse::success
+//            || !generator.addTrajectoryFootstepRectangularRelativePose(goal, swingFoot, req.footstep_height, footstepPose, req.footstep_duration))
+    if (res.status != reemc_trajectory_execution::single_footstep_executionResponse::success
+            || !generator.addTrajectoryFootstepRelativePose(goal, swingFoot, req.footstep_height, footstepPose, req.footstep_duration))
+    {
+        std::cout << "if false 2" << std::endl;
+        res.status = reemc_trajectory_execution::single_footstep_executionResponse::fail;
+    }
+    else
+        generator.setInitialJointStates(goal.trajectory.points.back().positions);
 
-  if (res.status == reemc_trajectory_execution::single_footstep_executionResponse::success)
-  {
-    goal.trajectory.header.stamp = ros::Time::now();
-    trajectoryClient->sendGoal(goal);
-  }
+    if (res.status != reemc_trajectory_execution::single_footstep_executionResponse::success
+            || !generator.addTrajectoryBaseAboveFoot(goal, swingFoot, req.base_height, 0.0, req.base_speed))
+    {
+        std::cout << "if false 3" << std::endl;
+        res.status = reemc_trajectory_execution::single_footstep_executionResponse::fail;
+    }
 
-  return true;
+    if (res.status == reemc_trajectory_execution::single_footstep_executionResponse::success)
+    {
+        goal.trajectory.header.stamp = ros::Time::now();
+        trajectoryClient->sendGoal(goal);
+    }
+
+    std::cout << "Service end!!!!!" << std::endl;
+    return true;
 }
 
 bool FootstepExecutor::serviceStepToInitPoseHandler(reemc_trajectory_execution::step_to_init_poseRequest &req,
-                                                    reemc_trajectory_execution::step_to_init_poseResponse &res)
+        reemc_trajectory_execution::step_to_init_poseResponse &res)
 {
-  control_msgs::FollowJointTrajectoryGoal goal;
+    control_msgs::FollowJointTrajectoryGoal goal;
     RobotTrajectoryGenerator::Foot supportFoot, swingFoot;
 
     if (req.support == reemc_trajectory_execution::single_footstep_executionRequest::left)
     {
-      supportFoot = RobotTrajectoryGenerator::Foot::left;
-      swingFoot = RobotTrajectoryGenerator::Foot::right;
+        supportFoot = RobotTrajectoryGenerator::Foot::left;
+        swingFoot = RobotTrajectoryGenerator::Foot::right;
     }
     else
     {
-      supportFoot = RobotTrajectoryGenerator::Foot::right;
-      swingFoot = RobotTrajectoryGenerator::Foot::left;
+        supportFoot = RobotTrajectoryGenerator::Foot::right;
+        swingFoot = RobotTrajectoryGenerator::Foot::left;
     }
 
     Pose6D goalPose(0.0, (supportFoot == RobotTrajectoryGenerator::Foot::right ? req.foot_separation : -req.foot_separation), 0.0, 0.0, 0.0, 0.0);
@@ -131,24 +147,24 @@ bool FootstepExecutor::serviceStepToInitPoseHandler(reemc_trajectory_execution::
     res.status = reemc_trajectory_execution::single_footstep_executionResponse::success;
     generator.setInitialJointStates(jointStates);
     if (!generator.addTrajectoryBaseAboveFoot(goal, supportFoot, req.base_height, 0.0, req.base_speed))
-      res.status = reemc_trajectory_execution::single_footstep_executionResponse::fail;
+        res.status = reemc_trajectory_execution::single_footstep_executionResponse::fail;
     else
-      generator.setInitialJointStates(goal.trajectory.points.back().positions);
+        generator.setInitialJointStates(goal.trajectory.points.back().positions);
 
     if (res.status != reemc_trajectory_execution::single_footstep_executionResponse::success
-        || !generator.addTrajectoryFootstepRelativePose(goal, swingFoot, 0.05, goalPose, req.footstep_duration))
-      res.status = reemc_trajectory_execution::single_footstep_executionResponse::fail;
+            || !generator.addTrajectoryFootstepRelativePose(goal, swingFoot, 0.05, goalPose, req.footstep_duration))
+        res.status = reemc_trajectory_execution::single_footstep_executionResponse::fail;
     else
-      generator.setInitialJointStates(goal.trajectory.points.back().positions);
+        generator.setInitialJointStates(goal.trajectory.points.back().positions);
 
     if (res.status != reemc_trajectory_execution::single_footstep_executionResponse::success
-        || !generator.addTrajectoryBaseBetweenFeet(goal, req.base_height, req.base_speed))
-      res.status = reemc_trajectory_execution::single_footstep_executionResponse::fail;
+            || !generator.addTrajectoryBaseBetweenFeet(goal, req.base_height, req.base_speed))
+        res.status = reemc_trajectory_execution::single_footstep_executionResponse::fail;
 
     if (res.status == reemc_trajectory_execution::single_footstep_executionResponse::success)
     {
-      goal.trajectory.header.stamp = ros::Time::now();
-      trajectoryClient->sendGoal(goal);
+        goal.trajectory.header.stamp = ros::Time::now();
+        trajectoryClient->sendGoal(goal);
     }
 
     return true;
